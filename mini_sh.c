@@ -1,7 +1,3 @@
-#include <stdio.h>
-#include <stdlib.h>
-#include <errno.h>
-#include <unistd.h>
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
@@ -11,12 +7,16 @@
 #include <stdlib.h>
 #include <errno.h>
 
+#include <signal.h>
+
 #define FALSE 0
 #define TRUE 1
 
 #define EOL	1
 #define ARG	2
 #define AMPERSAND 3
+#define RE_IN 4
+#define RE_OUT 5
 
 #define FOREGROUND 0
 #define BACKGROUND 1
@@ -24,6 +24,17 @@
 static char	input[512];
 static char	tokens[1024];
 char		*ptr, *tok;
+
+int sigchild_handler(int signo) 
+{
+    //pid_t pid;
+//    signal(signo, SIG_IGN);
+    while ((pid=wait(NULL)) < 0)
+        if (errno != EINTR) return -1;
+    
+    //printf("pid : %d exit\n", pid);
+    return 0;
+}
 
 int get_token(char **outptr)
 {
@@ -37,6 +48,8 @@ int get_token(char **outptr)
 	switch (*ptr++) {
 		case '\0' : type = EOL; break;
 		case '&': type = AMPERSAND; break;
+        case '<' : type = RE_IN break;
+        case '>' : type = RE_OUT break;
 		default : type = ARG;
 			while ((*ptr != ' ') && (*ptr != '&') &&
 				(*ptr != '\t') && (*ptr != '\0'))
@@ -59,20 +72,25 @@ int execute(char **comm, int how)
 		fprintf(stderr, "minish : command not found\n");
 		exit(127);
 	}
-/*
+
+    if (how != BACKGROUND) {
+        pause();
+    }
+    /*
 	if (how == BACKGROUND) {	// Background execution
+
 	}
 	else {	// Foreground Execution
-	}		
-*/
-	while (waitpid(pid, NULL, 0) < 0)
-		if (errno != EINTR) return -1;
+        pause();
+	}
+    */
+
 	return 0;
 }
 
 int parse_and_execute(char *input)
 {
-	char	*arg[1024];
+	char *arg[1024];
 	int	type, how;
 	int	quit = FALSE;
 	int	narg = 0;
@@ -90,7 +108,7 @@ int parse_and_execute(char *input)
 			if (!strcmp(arg[0], "quit")) quit = TRUE;
 			else if (!strcmp(arg[0], "exit")) quit = TRUE;
 			else if (!strcmp(arg[0], "cd")) {
-				/* Do something */
+                chdir(arg[1]);
 			}
 			else if (!strcmp(arg[0], "type")) {
 				if (narg > 1) {
@@ -130,14 +148,16 @@ int parse_and_execute(char *input)
 
 main()
 {
-    	char	*arg[1024];
 	int	quit;
+    char cwd[1024];
+	printf("msh(%s) # ", getcwd(cwd, 1024));
+ 
+    signal(SIGCHLD, sigchild_handler);
 
-	printf("msh # ");
 	while (gets(input)) {
 		quit = parse_and_execute(input);
 		if (quit) break;
-		printf("msh # ");
+        printf("msh(%s) # ", getcwd(cwd, 1024));
 	}
 }
 

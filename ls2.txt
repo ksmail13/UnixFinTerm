@@ -1,11 +1,19 @@
-Makefile
-README.md
-asdf
-ls.txt
-mini_sh.c
-msh
-msh.c
-obj
-re_pi_info.c
-re_pi_info.h
-tags
+total 120
+drwxr-xr-x 4 micky micky  4096 12월 20 03:50 .
+drwxr-xr-x 6 micky micky  4096 12월 19 15:05 ..
+drwxr-xr-x 8 micky micky  4096 12월 20 00:27 .git
+-rw-r--r-- 1 micky micky 24576 12월 20 03:50 .mini_sh.c.swp
+-rw-r--r-- 1 micky micky 12288 12월 20 03:35 .re_pi_info.c.swp
+-rw-r--r-- 1 micky micky 12288 12월 20 01:39 .re_pi_info.h.swp
+-rw-r--r-- 1 micky micky   364 12월 20 01:41 Makefile
+-rw-r--r-- 1 micky micky     0 12월 19 15:01 README.md
+-rw-r--r-- 1 micky micky   264 12월 19 15:01 asdf
+-rw-r--r-- 1 micky micky     0 12월 20 04:28 ls.txt
+-rw-r--r-- 1 micky micky    86 12월 20 00:27 ls2.txt
+-rw-r--r-- 1 micky micky  6213 12월 20 03:50 mini_sh.c
+-rwxr-xr-x 1 micky micky 14619 12월 20 03:50 msh
+-rw-r--r-- 1 micky micky  1969 12월 19 15:01 msh.c
+drwxr-xr-x 2 micky micky  4096 12월 20 03:50 obj
+-rw-r--r-- 1 micky micky  1697 12월 20 03:35 re_pi_info.c
+-rw-r--r-- 1 micky micky   914 12월 20 00:27 re_pi_info.h
+-rw-r--r-- 1 micky micky  4136 12월 20 00:27 tags

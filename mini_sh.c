@@ -27,6 +27,9 @@
 
 static char	input[512];
 static char	tokens[1024];
+
+static int pipes[512][2];
+
 char		*ptr, *tok;
 
 void sigchild_handler(int signo) 
@@ -58,7 +61,7 @@ int get_token(char **outptr)
 	while ((*ptr == ' ') || (*ptr == '\t')) ptr++;
 
 	*tok++ = *ptr;
-
+    //putchar(*ptr);putchar('\n');
 	switch (*ptr++) {
 		case '\0' : type = EOL; break;
 		case '&': type = AMPERSAND; break;
@@ -100,46 +103,69 @@ int redirect_to_file(char *f_name, int file_flags, int fd) {
     return 0;
 }
 
-int child_execute(char **comm, struct re_pi_info *re_pi_info) 
+
+//TODO : redirect with pipelining, pipelining background process
+int child_execute(char **comm, struct re_pi_info *re_pi_info, int level) 
 {
     int input_redirection_index = re_pi_info->re_info.in_redi_idx;
     int output_redirection_index = re_pi_info->re_info.out_redi_idx;
+    int pipe_idx;
 
     // set interrupt signal handler to default
     signal(SIGINT, SIG_DFL);
-
+    if(level) {
+        dup2(pipes[level][0], STDIN_FILENO);
+        close(pipes[level][1]);
+    }
     if(input_redirection_index) {
-        if(redirect_to_file(comm[input_redirection_index], O_RDONLY, STDIN_FILENO) < 0) {
+        if(redirect_to_file(comm[input_redirection_index], \
+                    O_RDONLY, STDIN_FILENO) < 0) {
             exit(127);
         }
         comm[input_redirection_index] = (char*) '\0';
+        re_pi_info->re_info.in_redi_idx = 0;
     }
 
     if(output_redirection_index) {
-        if(redirect_to_file(comm[output_redirection_index], O_WRONLY|O_CREAT|O_TRUNC, STDOUT_FILENO) < 0) {
+        if(redirect_to_file(comm[output_redirection_index], \
+                    O_WRONLY|O_CREAT|O_TRUNC, STDOUT_FILENO) < 0) {
             exit(127);
         }
         comm[output_redirection_index] = (char*) '\0';
+        re_pi_info->re_info.out_redi_idx = 0;
     }
 
+    if(re_pi_info->pi_info.cnt > 0) {
+        pipe_idx = get_pipe_index(&(re_pi_info->pi_info));
+        pipe(pipes[level+1]);
+        execute(comm+pipe_idx, BACKGROUND, re_pi_info, level+1);
+        dup2(pipes[level+1][1], STDOUT_FILENO);
+        close(pipes[level+1][0]);
+        comm[pipe_idx] = (char *)'\0';
+    }
     execvp(*comm, comm);
     fprintf(stderr, "minish : command not found\n");
     exit(127);
 
 }
 
-int execute(char **comm, int how, struct re_pi_info *re_pi_info)
+int execute(char **comm, int how, struct re_pi_info *re_pi_info, int level)
 {
     int	pid;
-    int in_fd, out_fd;
-    int pstat, wait_ret;
+    //int pstat, wait_ret;
+    
+    int i=0;
+    /*printf("pipe cnt %d\n ", re_pi_info->pi_info.cnt);
+    for(i=0;i<re_pi_info->pi_info.cnt;i++) {
+        printf("pipe index %d\n", get_pipe_index(&(re_pi_info->pi_info)));
+    }*/
 
     if ((pid = fork()) < 0) {
 		fprintf(stderr, "minish : fork error\n");
 		return(-1);
 	}
     else if (pid == 0) {
-        child_execute(comm, re_pi_info);
+        child_execute(comm, re_pi_info, level);
     }
     
 	if (how == BACKGROUND) {	// Background execution
@@ -215,7 +241,7 @@ int parse_and_execute(char *input)
 				how = (type == AMPERSAND) ? BACKGROUND : FOREGROUND;
 				arg[narg] = NULL;
 				if (narg != 0)
-					execute(arg, how, &re_pi_info);
+					execute(arg, how, &re_pi_info,0);
 			}
 			narg = 0;
 			if (type == EOL)
@@ -235,7 +261,8 @@ int parse_and_execute(char *input)
 	return quit;
 }
 
-void signal_init() {
+void signal_init() 
+{
     signal(SIGINT, sig_handler); 
     signal(SIGCHLD, sigchild_handler);
 }

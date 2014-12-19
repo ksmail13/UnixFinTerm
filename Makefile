@@ -1,4 +1,5 @@
-CC=gcc-4.9
+CC=gcc
+#CC=gcc-4.9
 EXECUTE=msh
 COMPILE_FLAG=
 OBJ=obj

@@ -6,8 +6,11 @@
 #include <unistd.h>
 #include <stdlib.h>
 #include <errno.h>
+#include <string.h>
 
 #include <signal.h>
+
+#include "re_pi_info.h"
 
 #define FALSE 0
 #define TRUE 1
@@ -17,6 +20,7 @@
 #define AMPERSAND 3
 #define RE_IN 4
 #define RE_OUT 5
+#define PIPE 6
 
 #define FOREGROUND 0
 #define BACKGROUND 1
@@ -25,16 +29,25 @@ static char	input[512];
 static char	tokens[1024];
 char		*ptr, *tok;
 
-int sigchild_handler(int signo) 
+void sigchild_handler(int signo) 
 {
     pid_t pid;
-    signal(signo, SIG_IGN);
+    //signal(signo, SIG_IGN);
     while ((pid=wait(NULL)) < 0)
-        if (errno != EINTR) return -1;
+        if (errno != EINTR) return ;
     
-    printf("%d: finish\n", pid);
+    //printf("%d: finish\n", pid);
 
-    return 0;
+    return ;
+}
+
+void sig_handler(int signo) 
+{
+    switch(signo) {
+        case SIGINT:
+            fprintf(stderr, "\b\b  \b\b");
+            break;
+    }
 }
 
 int get_token(char **outptr)
@@ -51,6 +64,7 @@ int get_token(char **outptr)
 		case '&': type = AMPERSAND; break;
         case '<' : type = RE_IN; break;
         case '>' : type = RE_OUT; break;
+        case '|' : type = PIPE; break;
 		default : type = ARG;
 			while ((*ptr != ' ') && (*ptr != '&') &&
 				(*ptr != '\t') && (*ptr != '\0'))
@@ -60,53 +74,83 @@ int get_token(char **outptr)
 	return(type);
 }
 
-int execute(char **comm, int how, int re_in_index, int re_out_index)
+/*
+ * fd를 다른 파일로 redirect 시킨다.
+ * @param
+ * f_name : redirect 시킬 파일 이름
+ * file_flags : 파일 open할때의 플래그
+ * fd : 파일로 redirect시킬 원래 fd
+ * @return success 0 fail -1
+ */
+int redirect_to_file(char *f_name, int file_flags, int fd) {
+    int to_fd;
+
+    if(file_flags & O_CREAT)
+        to_fd = open(f_name, file_flags, 0666);
+    else
+        to_fd = open(f_name, file_flags);
+
+    if(to_fd < 0) {
+        fprintf(stderr, "%s : %s\n", f_name, strerror(errno));
+        return -1;
+    }
+    else {
+        dup2(to_fd, fd);
+    }
+    return 0;
+}
+
+int child_execute(char **comm, struct re_pi_info *re_pi_info) 
 {
-	int	pid;
+    int input_redirection_index = re_pi_info->re_info.in_redi_idx;
+    int output_redirection_index = re_pi_info->re_info.out_redi_idx;
+
+    // set interrupt signal handler to default
+    signal(SIGINT, SIG_DFL);
+
+    if(input_redirection_index) {
+        if(redirect_to_file(comm[input_redirection_index], O_RDONLY, STDIN_FILENO) < 0) {
+            exit(127);
+        }
+        comm[input_redirection_index] = (char*) '\0';
+    }
+
+    if(output_redirection_index) {
+        if(redirect_to_file(comm[output_redirection_index], O_WRONLY|O_CREAT|O_TRUNC, STDOUT_FILENO) < 0) {
+            exit(127);
+        }
+        comm[output_redirection_index] = (char*) '\0';
+    }
+
+    execvp(*comm, comm);
+    fprintf(stderr, "minish : command not found\n");
+    exit(127);
+
+}
+
+int execute(char **comm, int how, struct re_pi_info *re_pi_info)
+{
+    int	pid;
     int in_fd, out_fd;
     int pstat, wait_ret;
 
-	if ((pid = fork()) < 0) {
+    if ((pid = fork()) < 0) {
 		fprintf(stderr, "minish : fork error\n");
 		return(-1);
 	}
     else if (pid == 0) {
-        if(re_in_index) {
-            if((in_fd=open(comm[re_in_index], O_RDONLY)) < 0) {
-                fprintf(stderr, "minish : file %s not found\n", comm[re_in_index]);
-                exit(127);
-            }
-            else {
-                dup2(in_fd, STDIN_FILENO);
-            }
-
-            comm[re_in_index] = (char*) '\0';
-        }
-        if(re_out_index) {
-            if((out_fd = open(comm[re_out_index], O_WRONLY|O_CREAT|O_TRUNC, 0666)) < 0) {
-                fprintf(stderr, "minish : file %d : %s create error\n",\
-                        re_out_index, comm[re_out_index]);
-                exit(127);
-            }
-            else {
-                dup2(out_fd, STDOUT_FILENO);
-            }
-            comm[re_out_index] = (char*) '\0';
-        } 
-
-        execvp(*comm, comm);
-        fprintf(stderr, "minish : command not found\n");
-        exit(127);
+        child_execute(comm, re_pi_info);
     }
     
 	if (how == BACKGROUND) {	// Background execution
-        fprintf(stderr, "%d:%s\n", pid, *comm);
+        //fprintf(stderr, "%d:%s\n", pid, *comm);
 	}
 	else {	// Foreground Execution
-        while((wait_ret = waitpid(pid, &pstat, WNOHANG))==0);
+        /*while((wait_ret = waitpid(pid, &pstat, WNOHANG))==0);
         if(wait_ret < 0) {
             perror("wait err");
-        }
+        }*/
+        pause();
 	}
     
 
@@ -121,6 +165,11 @@ int parse_and_execute(char *input)
 	int	narg = 0;
 	int	finished = FALSE;
     int re_in_index = 0, re_out_index = 0;
+    struct re_pi_info re_pi_info;
+    memset(&re_pi_info, 0, sizeof(struct re_pi_info));
+
+    int pipe_idx[1024];
+    int pipe_cnt=0;
 
 	ptr = input;
 	tok = tokens;
@@ -134,7 +183,14 @@ int parse_and_execute(char *input)
 			if (!strcmp(arg[0], "quit")) quit = TRUE;
 			else if (!strcmp(arg[0], "exit")) quit = TRUE;
 			else if (!strcmp(arg[0], "cd")) {
-                chdir(arg[1]);
+
+                if(narg > 1 && strcmp(arg[1], "~")){
+                    chdir(arg[1]);
+                }
+                else {
+                    // to home directory
+                    chdir(getenv("HOME"));
+                }
 			}
 			else if (!strcmp(arg[0], "type")) {
 				if (narg > 1) {
@@ -159,24 +215,30 @@ int parse_and_execute(char *input)
 				how = (type == AMPERSAND) ? BACKGROUND : FOREGROUND;
 				arg[narg] = NULL;
 				if (narg != 0)
-					execute(arg, how, re_in_index, re_out_index);
+					execute(arg, how, &re_pi_info);
 			}
 			narg = 0;
 			if (type == EOL)
 				finished = TRUE;
 			break; 
         case RE_IN:
-            re_in_index = narg;
+            re_pi_info.re_info.in_redi_idx = narg;
             break;
         case RE_OUT:
-            re_out_index = narg;
+            re_pi_info.re_info.out_redi_idx = narg;
+            break;
+        case PIPE:
+            add_pipe_index(&(re_pi_info.pi_info), narg);
             break;
 		}
 	}
 	return quit;
 }
 
-
+void signal_init() {
+    signal(SIGINT, sig_handler); 
+    signal(SIGCHLD, sigchild_handler);
+}
 
 main()
 {
@@ -184,7 +246,7 @@ main()
     char cwd[1024];
 	printf("msh(%s) # ", getcwd(cwd, 1024));
  
-    signal(SIGCHLD, sigchild_handler);
+    signal_init();
 
 	while (gets(input)) {
 		quit = parse_and_execute(input);

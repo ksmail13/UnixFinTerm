@@ -1,0 +1,57 @@
+!_TAG_FILE_FORMAT	2	/extended format; --format=1 will not append ;" to lines/
+!_TAG_FILE_SORTED	1	/0=unsorted, 1=sorted, 2=foldcase/
+!_TAG_PROGRAM_AUTHOR	Darren Hiebert	/dhiebert@users.sourceforge.net/
+!_TAG_PROGRAM_NAME	Exuberant Ctags	//
+!_TAG_PROGRAM_URL	http://ctags.sourceforge.net	/official site/
+!_TAG_PROGRAM_VERSION	5.8	//
+AMPERSAND	mini_sh.c	/^#define AMPERSAND /;"	d	file:
+AMPERSAND	msh.c	/^enum Tokens {EOL='\\0', ARG, AMPERSAND='&', RE_IN='<', RE_OUT='>', PIPE='|', EMPTY=' ', EMPTY2='\\t'};$/;"	e	enum:Tokens	file:
+ARG	mini_sh.c	/^#define ARG	/;"	d	file:
+ARG	msh.c	/^enum Tokens {EOL='\\0', ARG, AMPERSAND='&', RE_IN='<', RE_OUT='>', PIPE='|', EMPTY=' ', EMPTY2='\\t'};$/;"	e	enum:Tokens	file:
+BACKGROUND	mini_sh.c	/^#define BACKGROUND /;"	d	file:
+BACKGROUND	msh.c	/^enum TokenType {BACKGROUND = 1, RE_IN=2, RE_OUT=4, PIPE=8};$/;"	e	enum:TokenType	file:
+COMMAND_CNT	msh.c	/^#define COMMAND_CNT /;"	d	file:
+COMMAND_SIZE	msh.c	/^#define COMMAND_SIZE /;"	d	file:
+EMPTY	msh.c	/^enum Tokens {EOL='\\0', ARG, AMPERSAND='&', RE_IN='<', RE_OUT='>', PIPE='|', EMPTY=' ', EMPTY2='\\t'};$/;"	e	enum:Tokens	file:
+EMPTY2	msh.c	/^enum Tokens {EOL='\\0', ARG, AMPERSAND='&', RE_IN='<', RE_OUT='>', PIPE='|', EMPTY=' ', EMPTY2='\\t'};$/;"	e	enum:Tokens	file:
+EOL	mini_sh.c	/^#define EOL	/;"	d	file:
+EOL	msh.c	/^enum Tokens {EOL='\\0', ARG, AMPERSAND='&', RE_IN='<', RE_OUT='>', PIPE='|', EMPTY=' ', EMPTY2='\\t'};$/;"	e	enum:Tokens	file:
+FALSE	mini_sh.c	/^#define FALSE /;"	d	file:
+FALSE	msh.c	/^#define FALSE /;"	d	file:
+FOREGROUND	mini_sh.c	/^#define FOREGROUND /;"	d	file:
+PIPE	msh.c	/^enum TokenType {BACKGROUND = 1, RE_IN=2, RE_OUT=4, PIPE=8};$/;"	e	enum:TokenType	file:
+PIPE	msh.c	/^enum Tokens {EOL='\\0', ARG, AMPERSAND='&', RE_IN='<', RE_OUT='>', PIPE='|', EMPTY=' ', EMPTY2='\\t'};$/;"	e	enum:Tokens	file:
+RE_IN	mini_sh.c	/^#define RE_IN /;"	d	file:
+RE_IN	msh.c	/^enum TokenType {BACKGROUND = 1, RE_IN=2, RE_OUT=4, PIPE=8};$/;"	e	enum:TokenType	file:
+RE_IN	msh.c	/^enum Tokens {EOL='\\0', ARG, AMPERSAND='&', RE_IN='<', RE_OUT='>', PIPE='|', EMPTY=' ', EMPTY2='\\t'};$/;"	e	enum:Tokens	file:
+RE_OUT	mini_sh.c	/^#define RE_OUT /;"	d	file:
+RE_OUT	msh.c	/^enum TokenType {BACKGROUND = 1, RE_IN=2, RE_OUT=4, PIPE=8};$/;"	e	enum:TokenType	file:
+RE_OUT	msh.c	/^enum Tokens {EOL='\\0', ARG, AMPERSAND='&', RE_IN='<', RE_OUT='>', PIPE='|', EMPTY=' ', EMPTY2='\\t'};$/;"	e	enum:Tokens	file:
+TRUE	mini_sh.c	/^#define TRUE /;"	d	file:
+TRUE	msh.c	/^#define TRUE /;"	d	file:
+TokenType	msh.c	/^enum TokenType {BACKGROUND = 1, RE_IN=2, RE_OUT=4, PIPE=8};$/;"	g	file:
+Tokens	msh.c	/^enum Tokens {EOL='\\0', ARG, AMPERSAND='&', RE_IN='<', RE_OUT='>', PIPE='|', EMPTY=' ', EMPTY2='\\t'};$/;"	g	file:
+arg_cnt	msh.c	/^    int arg_cnt;$/;"	m	struct:commandinfo	file:
+args	msh.c	/^    char *args[1024];$/;"	m	struct:commandinfo	file:
+call	msh.c	/^    char *call;$/;"	m	struct:commandinfo	file:
+commandinfo	msh.c	/^struct commandinfo {$/;"	s	file:
+execute	mini_sh.c	/^int execute(char **comm, int how, int re_in_index, int re_out_index)$/;"	f
+get_token	mini_sh.c	/^int get_token(char **outptr)$/;"	f
+in	msh.c	/^    char *in;$/;"	m	struct:commandinfo	file:
+init_sh	msh.c	/^static void init_sh() $/;"	f	file:
+input	mini_sh.c	/^static char	input[512];$/;"	v	file:
+main	mini_sh.c	/^main()$/;"	f
+main	msh.c	/^int main() $/;"	f
+out	msh.c	/^    char *out;$/;"	m	struct:commandinfo	file:
+parse_and_execute	mini_sh.c	/^int parse_and_execute(char *input)$/;"	f
+parse_command	msh.c	/^static int parse_command(char *command, char *command_save[]) $/;"	f	file:
+print_sh_head	msh.c	/^static inline void print_sh_head() $/;"	f	file:
+ptr	mini_sh.c	/^char		*ptr, *tok;$/;"	v
+redirect_to_file	mini_sh.c	/^int redirect_to_file(char *f_name, int file_flags, int fd) {$/;"	f
+sig_handler	mini_sh.c	/^void sig_handler(int signo) $/;"	f
+sigchild_handler	mini_sh.c	/^void sigchild_handler(int signo) $/;"	f
+sigchld_handler	msh.c	/^int sigchld_handler(int signo) {$/;"	f
+signal_init	mini_sh.c	/^void signal_init() {$/;"	f
+tok	mini_sh.c	/^char		*ptr, *tok;$/;"	v
+tokens	mini_sh.c	/^static char	tokens[1024];$/;"	v	file:
+type	msh.c	/^    int type;$/;"	m	struct:commandinfo	file:

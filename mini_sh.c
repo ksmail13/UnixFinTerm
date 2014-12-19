@@ -28,11 +28,12 @@ char		*ptr, *tok;
 int sigchild_handler(int signo) 
 {
     pid_t pid;
-//    signal(signo, SIG_IGN);
+    signal(signo, SIG_IGN);
     while ((pid=wait(NULL)) < 0)
         if (errno != EINTR) return -1;
     
-    //printf("pid : %d exit\n", pid);
+    printf("%d: finish\n", pid);
+
     return 0;
 }
 
@@ -63,52 +64,51 @@ int execute(char **comm, int how, int re_in_index, int re_out_index)
 {
 	int	pid;
     int in_fd, out_fd;
+    int pstat, wait_ret;
 
-    printf("in index %d out index %d \n", re_in_index, re_out_index);
 	if ((pid = fork()) < 0) {
 		fprintf(stderr, "minish : fork error\n");
 		return(-1);
 	}
-	else if (pid == 0) {
-        if(!re_in_index || !re_out_index) {
-            if(re_in_index) {
-                if((in_fd=open(comm[re_in_index], O_RDONLY)) < 0) {
-                    fprintf(stderr, "minish : file %s not found\n", comm[re_in_index]);
-                    exit(127);
-                }
-                else {
-                    dup2(in_fd, 0);
-                }
-
-                comm[re_in_index] = (char*) '\0';
+    else if (pid == 0) {
+        if(re_in_index) {
+            if((in_fd=open(comm[re_in_index], O_RDONLY)) < 0) {
+                fprintf(stderr, "minish : file %s not found\n", comm[re_in_index]);
+                exit(127);
             }
-            if(re_out_index) {
-                if((out_fd = open(comm[re_out_index], O_WRONLY|O_CREAT|O_TRUNC, 0644)) < 0) {
-                    fprintf(stderr, "minish : file %d : %s create error\n", re_out_index, comm[re_out_index]);
-                    exit(127);
-                }
-                else {
-                    dup2(out_fd, 1);
-                }
-                comm[re_out_index] = (char*) '\0';
-            } 
+            else {
+                dup2(in_fd, STDIN_FILENO);
+            }
+
+            comm[re_in_index] = (char*) '\0';
         }
-		execvp(*comm, comm);
-		fprintf(stderr, "minish : command not found\n");
-		exit(127);
-	}
+        if(re_out_index) {
+            if((out_fd = open(comm[re_out_index], O_WRONLY|O_CREAT|O_TRUNC, 0666)) < 0) {
+                fprintf(stderr, "minish : file %d : %s create error\n",\
+                        re_out_index, comm[re_out_index]);
+                exit(127);
+            }
+            else {
+                dup2(out_fd, STDOUT_FILENO);
+            }
+            comm[re_out_index] = (char*) '\0';
+        } 
 
-    if (how != BACKGROUND) {
-        pause();
+        execvp(*comm, comm);
+        fprintf(stderr, "minish : command not found\n");
+        exit(127);
     }
-    /*
+    
 	if (how == BACKGROUND) {	// Background execution
-
+        fprintf(stderr, "%d:%s\n", pid, *comm);
 	}
 	else {	// Foreground Execution
-        pause();
+        while((wait_ret = waitpid(pid, &pstat, WNOHANG))==0);
+        if(wait_ret < 0) {
+            perror("wait err");
+        }
 	}
-    */
+    
 
 	return 0;
 }

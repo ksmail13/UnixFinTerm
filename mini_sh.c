@@ -138,6 +138,32 @@ int wait_process(struct int_node **list_head, int how) {
     } while(curr != NULL);
 }
 
+int pipelining(int pipe_sz, int i)
+{
+    int j;
+    // pipe stdout to pipe input [1] 
+    if(pipe_sz > 0) {
+        LOG("i : %d pipe_sz: %d\n", i, pipe_sz);
+        for(j=0;j<i-1;j++) {
+            close(pipes[j][0]);
+            close(pipes[j][1]);
+        }
+        if(pipe_sz > i) {
+            close(pipes[i][0]);
+            dup2(pipes[i][1], STDOUT_FILENO);
+        }
+        if(i>0) {
+            dup2(pipes[i-1][0], STDIN_FILENO);
+            close(pipes[i-1][1]);
+        }
+        for(j=i+1;j<pipe_sz;j++) {
+            close(pipes[j][0]);
+            close(pipes[j][1]);
+        }
+    } 
+}
+
+
 int execute(char **comm, int how, struct comm_list *comm_list)
 {
     int i;
@@ -153,36 +179,15 @@ int execute(char **comm, int how, struct comm_list *comm_list)
     }
 
     for(i=0;i<=comm_list->cnt;i++) {
-        //printf("comm %d %s in %d %s  out %d %s\n", comm_list->comms[i].comm_idx,comm[comm_list->comms[i].comm_idx], comm_list->comms[i].in_idx, comm[comm_list->comms[i].in_idx],comm_list->comms[i].out_idx,comm[comm_list->comms[i].out_idx]);
+        LOG("comm %d %s in %d %s  out %d %s\n", comm_list->comms[i].comm_idx,comm[comm_list->comms[i].comm_idx], comm_list->comms[i].in_idx, comm[comm_list->comms[i].in_idx],comm_list->comms[i].out_idx,comm[comm_list->comms[i].out_idx]);
 
         if((pid = fork()) < 0) {
             perror("fork error");
             return 1;
         }
         else if(pid == 0) {
-            int j;
             signal(SIGINT, SIG_DFL);
-            // pipe stdout to pipe input [1] 
-            if(pipe_sz > 0) {
-                LOG("i : %d pipe_sz: %d\n", i, pipe_sz);
-                for(j=0;j<i-1;j++) {
-                    close(pipes[j][0]);
-                    close(pipes[j][1]);
-                }
-                if(pipe_sz > i) {
-                    close(pipes[i][0]);
-                    dup2(pipes[i][1], STDOUT_FILENO);
-                }
-                if(i>0) {
-                    dup2(pipes[i-1][0], STDIN_FILENO);
-                    close(pipes[i-1][1]);
-                }
-                for(j=i+1;j<pipe_sz;j++) {
-                    close(pipes[j][0]);
-                    close(pipes[j][1]);
-                }
-            } 
-
+            pipelining(pipe_sz,i); 
             process_redirection_setting(comm,i, comm_list);
 
             if(i+1 <= comm_list->cnt) {
@@ -192,7 +197,8 @@ int execute(char **comm, int how, struct comm_list *comm_list)
             fprintf(stderr, "%s : command not found.\n", *(comm+comm_list->comms[i].comm_idx));
             exit(1);
         }
-        //fprintf(stderr,"create precess %d\n", pid);
+
+        LOG("create precess %d\n", pid);
         if(how == BACKGROUND) 
             append_int_node(&bg_proc_head, pid);
         else

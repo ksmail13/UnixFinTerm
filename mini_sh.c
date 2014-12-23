@@ -188,10 +188,20 @@ int newexecute(char **comm, int how, struct comm_list *comm_list)
                  comm[comm_list->comms[i].in_idx],
                  comm_list->comms[i].out_idx,
                  comm[comm_list->comms[i].out_idx]);
+
+        if((pid = fork()) < 0) {
+            if(comm_list->comms[i].in_idx != 0) {
+                redirect_to_file(comm[comm_list->comms[i].in_idx], O_RDONLY, STDIN_FILENO);
+            }
+            
+            if(comm_list->comms[i].out_idx != 0) {
+                redirect_to_file(comm[comm_list->comms[i].out_idx], O_WRONLY | O_CREAT | O_TRUNC, STDOUT_FILENO);
+            }
+        }
     }
 
     if (how == BACKGROUND) {
-        append_int_node(bg_proc_head, p
+        append_int_node(bg_proc_head, pid);
     }
     else {
         if(waitpid(0, &child_res, 0) < 0) {

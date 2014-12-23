@@ -88,3 +88,34 @@ int get_pipe_index(struct pipe_info *p_info)
     p_info->cnt--;
     return ret;
 }
+
+int set_comm_idx(struct comm_list *comm_list, int comm_idx)
+{
+    if(comm_list == NULL) return -1;
+
+    comm_list->comms[comm_list->cnt].comm_idx = comm_idx;
+    return 0;
+}
+
+int set_in_idx(struct comm_list *comm_list, int in_idx)
+{
+    if(comm_list == NULL) return -1;
+
+    comm_list->comms[comm_list->cnt].in_idx = in_idx;
+    return 0;
+}
+
+int set_out_idx(struct comm_list *comm_list, int out_idx)
+{
+    if(comm_list == NULL) return -1;
+
+    comm_list->comms[comm_list->cnt].out_idx = out_idx;
+    return 0;
+}
+
+int set_pipe(struct comm_list *comm_list)
+{
+    if (comm_list == NULL) return -1;
+
+    comm_list->cnt++;
+}

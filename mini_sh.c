@@ -30,6 +30,8 @@ static char	tokens[1024];
 
 static int pipes[512][2];
 
+static int_node *bg_proc_head;
+
 char		*ptr, *tok;
 
 void sigchild_handler(int signo) 
@@ -105,7 +107,7 @@ int redirect_to_file(char *f_name, int file_flags, int fd) {
 
 
 //TODO : redirect with pipelining, pipelining background process
-int child_execute(char **comm, struct re_pi_info *re_pi_info, int level) 
+int child_execute(char **comm, struct re_pi_info *re_pi_info) 
 {
     int input_redirection_index = re_pi_info->re_info.in_redi_idx;
     int output_redirection_index = re_pi_info->re_info.out_redi_idx;
@@ -113,10 +115,7 @@ int child_execute(char **comm, struct re_pi_info *re_pi_info, int level)
 
     // set interrupt signal handler to default
     signal(SIGINT, SIG_DFL);
-    if(level) {
-        dup2(pipes[level][0], STDIN_FILENO);
-        close(pipes[level][1]);
-    }
+    
     if(input_redirection_index) {
         if(redirect_to_file(comm[input_redirection_index], \
                     O_RDONLY, STDIN_FILENO) < 0) {
@@ -135,37 +134,29 @@ int child_execute(char **comm, struct re_pi_info *re_pi_info, int level)
         re_pi_info->re_info.out_redi_idx = 0;
     }
 
-    if(re_pi_info->pi_info.cnt > 0) {
-        pipe_idx = get_pipe_index(&(re_pi_info->pi_info));
-        pipe(pipes[level+1]);
-        execute(comm+pipe_idx, BACKGROUND, re_pi_info, level+1);
-        dup2(pipes[level+1][1], STDOUT_FILENO);
-        close(pipes[level+1][0]);
-        comm[pipe_idx] = (char *)'\0';
-    }
     execvp(*comm, comm);
     fprintf(stderr, "minish : command not found\n");
     exit(127);
 
 }
 
-int execute(char **comm, int how, struct re_pi_info *re_pi_info, int level)
+int execute(char **comm, int how, struct re_pi_info *re_pi_info)
 {
     int	pid;
     //int pstat, wait_ret;
     
     int i=0;
-    /*printf("pipe cnt %d\n ", re_pi_info->pi_info.cnt);
+    printf("pipe cnt %d\n ", re_pi_info->pi_info.cnt);
     for(i=0;i<re_pi_info->pi_info.cnt;i++) {
         printf("pipe index %d\n", get_pipe_index(&(re_pi_info->pi_info)));
-    }*/
+    }
 
     if ((pid = fork()) < 0) {
 		fprintf(stderr, "minish : fork error\n");
 		return(-1);
 	}
     else if (pid == 0) {
-        child_execute(comm, re_pi_info, level);
+        child_execute(comm, re_pi_info);
     }
     
 	if (how == BACKGROUND) {	// Background execution
@@ -183,6 +174,32 @@ int execute(char **comm, int how, struct re_pi_info *re_pi_info, int level)
 	return 0;
 }
 
+int newexecute(char **comm, int how, struct comm_list *comm_list)
+{
+    int i;
+    int pid;
+    if(comm_list == NULL) return -1;
+    
+    for(i=0;i<=comm_list->cnt;i++) {
+        printf("comm %d %s in %d %s  out %d %s\n", \
+                 comm_list->comms[i].comm_idx,
+                 comm[comm_list->comms[i].comm_idx],
+                 comm_list->comms[i].in_idx,
+                 comm[comm_list->comms[i].in_idx],
+                 comm_list->comms[i].out_idx,
+                 comm[comm_list->comms[i].out_idx]);
+    }
+
+    if (how == BACKGROUND) {
+        append_int_node(bg_proc_head, p
+    }
+    else {
+        if(waitpid(0, &child_res, 0) < 0) {
+            perror("wait error");
+        }
+    }
+}
+
 int parse_and_execute(char *input)
 {
 	char *arg[1024];
@@ -197,11 +214,22 @@ int parse_and_execute(char *input)
     int pipe_idx[1024];
     int pipe_cnt=0;
 
+    int new_comm = TRUE;
+
+    struct comm_list comm_list;
+    memset(&comm_list, 0, sizeof(struct comm_list));
+
 	ptr = input;
 	tok = tokens;
+
+    
 	while (!finished) {
 		switch (type = get_token(&arg[narg])) {
 		case ARG :
+            if(new_comm) {
+                set_comm_idx(&comm_list, narg);
+                new_comm = FALSE;
+            }
 			narg++;
 			break;
 		case EOL :
@@ -209,7 +237,6 @@ int parse_and_execute(char *input)
 			if (!strcmp(arg[0], "quit")) quit = TRUE;
 			else if (!strcmp(arg[0], "exit")) quit = TRUE;
 			else if (!strcmp(arg[0], "cd")) {
-
                 if(narg > 1 && strcmp(arg[1], "~")){
                     chdir(arg[1]);
                 }
@@ -240,8 +267,10 @@ int parse_and_execute(char *input)
 			else {
 				how = (type == AMPERSAND) ? BACKGROUND : FOREGROUND;
 				arg[narg] = NULL;
-				if (narg != 0)
-					execute(arg, how, &re_pi_info,0);
+				if (narg != 0) {
+                    newexecute(arg, &comm_list);
+					//execute(arg, how, &re_pi_info);
+                }
 			}
 			narg = 0;
 			if (type == EOL)
@@ -249,12 +278,16 @@ int parse_and_execute(char *input)
 			break; 
         case RE_IN:
             re_pi_info.re_info.in_redi_idx = narg;
+            set_in_idx(&comm_list, narg);
             break;
         case RE_OUT:
             re_pi_info.re_info.out_redi_idx = narg;
+            set_out_idx(&comm_list, narg);
             break;
         case PIPE:
             add_pipe_index(&(re_pi_info.pi_info), narg);
+            set_pipe(&comm_list);
+            new_comm = TRUE;
             break;
 		}
 	}

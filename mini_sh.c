@@ -12,6 +12,12 @@
 
 #include "re_pi_info.h"
 
+#ifdef DEBUG
+#define LOG(format, ...) fprintf(stderr, format, __VA_ARGS__)
+#else
+#define LOG(format, ...) 
+#endif
+
 #define FALSE 0
 #define TRUE 1
 
@@ -29,28 +35,18 @@ static char	input[512];
 static char	tokens[1024];
 
 static int pipes[512][2];
+static int pipe_sz;
 
-static int_node *bg_proc_head;
+static struct int_node *bg_proc_head=NULL;
 
 char		*ptr, *tok;
 
-void sigchild_handler(int signo) 
-{
-    pid_t pid;
-    //signal(signo, SIG_IGN);
-    while ((pid=wait(NULL)) < 0)
-        if (errno != EINTR) return ;
-    
-    //printf("%d: finish\n", pid);
-
-    return ;
-}
-
 void sig_handler(int signo) 
 {
+    char cwd[1024];
     switch(signo) {
         case SIGINT:
-            fprintf(stderr, "\b\b  \b\b");
+            printf("\b\b  \b\b");
             break;
     }
 }
@@ -96,7 +92,7 @@ int redirect_to_file(char *f_name, int file_flags, int fd) {
         to_fd = open(f_name, file_flags);
 
     if(to_fd < 0) {
-        fprintf(stderr, "%s : %s\n", f_name, strerror(errno));
+        LOG("%s : %s\n", f_name, strerror(errno));
         return -1;
     }
     else {
@@ -105,121 +101,123 @@ int redirect_to_file(char *f_name, int file_flags, int fd) {
     return 0;
 }
 
-
-//TODO : redirect with pipelining, pipelining background process
-int child_execute(char **comm, struct re_pi_info *re_pi_info) 
+int process_redirection_setting(char **comm, int idx, struct comm_list *comm_list)
 {
-    int input_redirection_index = re_pi_info->re_info.in_redi_idx;
-    int output_redirection_index = re_pi_info->re_info.out_redi_idx;
-    int pipe_idx;
-
-    // set interrupt signal handler to default
-    signal(SIGINT, SIG_DFL);
-    
-    if(input_redirection_index) {
-        if(redirect_to_file(comm[input_redirection_index], \
-                    O_RDONLY, STDIN_FILENO) < 0) {
-            exit(127);
-        }
-        comm[input_redirection_index] = (char*) '\0';
-        re_pi_info->re_info.in_redi_idx = 0;
+    if(comm_list->comms[idx].in_idx != 0) {
+        redirect_to_file(comm[comm_list->comms[idx].in_idx], O_RDONLY, STDIN_FILENO);
+        comm[comm_list->comms[idx].in_idx] = (char*) '\0';
     }
 
-    if(output_redirection_index) {
-        if(redirect_to_file(comm[output_redirection_index], \
-                    O_WRONLY|O_CREAT|O_TRUNC, STDOUT_FILENO) < 0) {
-            exit(127);
-        }
-        comm[output_redirection_index] = (char*) '\0';
-        re_pi_info->re_info.out_redi_idx = 0;
+    if(comm_list->comms[idx].out_idx != 0) {
+        redirect_to_file(comm[comm_list->comms[idx].out_idx], O_WRONLY | O_CREAT | O_TRUNC, STDOUT_FILENO);
+        comm[comm_list->comms[idx].out_idx] = (char*) '\0';
     }
-
-    execvp(*comm, comm);
-    fprintf(stderr, "minish : command not found\n");
-    exit(127);
-
+    return 0;
 }
 
-int execute(char **comm, int how, struct re_pi_info *re_pi_info)
-{
-    int	pid;
-    //int pstat, wait_ret;
-    
-    int i=0;
-    printf("pipe cnt %d\n ", re_pi_info->pi_info.cnt);
-    for(i=0;i<re_pi_info->pi_info.cnt;i++) {
-        printf("pipe index %d\n", get_pipe_index(&(re_pi_info->pi_info)));
-    }
+int wait_process(struct int_node **list_head, int how) {
+    int type = ((how == BACKGROUND)? WNOHANG : 0);
+    struct int_node *curr, *temp, *prev=NULL;
+    int child_res;
+    curr = *list_head;
+    prev = curr;
 
-    if ((pid = fork()) < 0) {
-		fprintf(stderr, "minish : fork error\n");
-		return(-1);
-	}
-    else if (pid == 0) {
-        child_execute(comm, re_pi_info);
-    }
-    
-	if (how == BACKGROUND) {	// Background execution
-        //fprintf(stderr, "%d:%s\n", pid, *comm);
-	}
-	else {	// Foreground Execution
-        /*while((wait_ret = waitpid(pid, &pstat, WNOHANG))==0);
-        if(wait_ret < 0) {
-            perror("wait err");
-        }*/
-        pause();
-	}
-    
+    do {
+        if(curr == NULL) break;
+        LOG("wait! pid : %d next:%d\n", curr->data, curr->next?curr->next->data:0);
+        if(waitpid(curr->data, &child_res, type) > 0) {
+            temp = curr;
+            curr = prev;
+            prev->next = temp->next;
+            if(temp == *list_head) *list_head = prev->next;
+            free(temp);
+        }
+        prev = curr;
+        curr = curr->next;
 
-	return 0;
+    } while(curr != NULL);
 }
 
-int newexecute(char **comm, int how, struct comm_list *comm_list)
+int execute(char **comm, int how, struct comm_list *comm_list)
 {
     int i;
     int pid;
+    int child_res;
+    struct int_node *proc_head=NULL;
     if(comm_list == NULL) return -1;
-    
+ 
+    pipe_sz=0;
+    for(i=0;i<comm_list->cnt;i++) {
+        pipe(pipes[i]);
+        pipe_sz++;
+    }
+
     for(i=0;i<=comm_list->cnt;i++) {
-        printf("comm %d %s in %d %s  out %d %s\n", \
-                 comm_list->comms[i].comm_idx,
-                 comm[comm_list->comms[i].comm_idx],
-                 comm_list->comms[i].in_idx,
-                 comm[comm_list->comms[i].in_idx],
-                 comm_list->comms[i].out_idx,
-                 comm[comm_list->comms[i].out_idx]);
+        //printf("comm %d %s in %d %s  out %d %s\n", comm_list->comms[i].comm_idx,comm[comm_list->comms[i].comm_idx], comm_list->comms[i].in_idx, comm[comm_list->comms[i].in_idx],comm_list->comms[i].out_idx,comm[comm_list->comms[i].out_idx]);
 
         if((pid = fork()) < 0) {
-            if(comm_list->comms[i].in_idx != 0) {
-                redirect_to_file(comm[comm_list->comms[i].in_idx], O_RDONLY, STDIN_FILENO);
-            }
-            
-            if(comm_list->comms[i].out_idx != 0) {
-                redirect_to_file(comm[comm_list->comms[i].out_idx], O_WRONLY | O_CREAT | O_TRUNC, STDOUT_FILENO);
-            }
+            perror("fork error");
+            return 1;
         }
-    }
+        else if(pid == 0) {
+            int j;
+            signal(SIGINT, SIG_DFL);
+            // pipe stdout to pipe input [1] 
+            if(pipe_sz > 0) {
+                LOG("i : %d pipe_sz: %d\n", i, pipe_sz);
+                for(j=0;j<i-1;j++) {
+                    close(pipes[j][0]);
+                    close(pipes[j][1]);
+                }
+                if(pipe_sz > i) {
+                    close(pipes[i][0]);
+                    dup2(pipes[i][1], STDOUT_FILENO);
+                }
+                if(i>0) {
+                    dup2(pipes[i-1][0], STDIN_FILENO);
+                    close(pipes[i-1][1]);
+                }
+                for(j=i+1;j<pipe_sz;j++) {
+                    close(pipes[j][0]);
+                    close(pipes[j][1]);
+                }
+            } 
 
-    if (how == BACKGROUND) {
-        append_int_node(bg_proc_head, pid);
-    }
-    else {
-        if(waitpid(0, &child_res, 0) < 0) {
-            perror("wait error");
+            process_redirection_setting(comm,i, comm_list);
+
+            if(i+1 <= comm_list->cnt) {
+                comm[comm_list->comms[i+1].comm_idx] = (char*)NULL;
+            }
+            execvp(*(comm+comm_list->comms[i].comm_idx), comm+comm_list->comms[i].comm_idx);
+            fprintf(stderr, "%s : command not found.\n", *(comm+comm_list->comms[i].comm_idx));
+            exit(1);
         }
+        //fprintf(stderr,"create precess %d\n", pid);
+        if(how == BACKGROUND) 
+            append_int_node(&bg_proc_head, pid);
+        else
+            append_int_node(&proc_head, pid);
+
+    }
+    
+    while(pipe_sz--) {
+        LOG("close pipe%d\n", pipe_sz);
+        close(pipes[pipe_sz][0]);
+        close(pipes[pipe_sz][1]);
+    }
+    
+    if(how == FOREGROUND) {
+        wait_process(&proc_head, FOREGROUND);
     }
 }
 
 int parse_and_execute(char *input)
 {
-	char *arg[1024];
-	int	type, how;
-	int	quit = FALSE;
-	int	narg = 0;
-	int	finished = FALSE;
-    int re_in_index = 0, re_out_index = 0;
-    struct re_pi_info re_pi_info;
-    memset(&re_pi_info, 0, sizeof(struct re_pi_info));
+    char *arg[1024];
+    int	type, how;
+    int	quit = FALSE;
+    int	narg = 0;
+    int	finished = FALSE;
 
     int pipe_idx[1024];
     int pipe_cnt=0;
@@ -229,73 +227,68 @@ int parse_and_execute(char *input)
     struct comm_list comm_list;
     memset(&comm_list, 0, sizeof(struct comm_list));
 
-	ptr = input;
-	tok = tokens;
+    ptr = input;
+    tok = tokens;
 
-    
-	while (!finished) {
-		switch (type = get_token(&arg[narg])) {
-		case ARG :
-            if(new_comm) {
-                set_comm_idx(&comm_list, narg);
-                new_comm = FALSE;
-            }
-			narg++;
-			break;
-		case EOL :
-		case AMPERSAND:
-			if (!strcmp(arg[0], "quit")) quit = TRUE;
-			else if (!strcmp(arg[0], "exit")) quit = TRUE;
-			else if (!strcmp(arg[0], "cd")) {
-                if(narg > 1 && strcmp(arg[1], "~")){
-                    chdir(arg[1]);
+    while (!finished) {
+        switch (type = get_token(&arg[narg])) {
+            case ARG :
+                if(new_comm) {
+                    set_comm_idx(&comm_list, narg);
+                    new_comm = FALSE;
+                }
+                narg++;
+                break;
+            case EOL :
+            case AMPERSAND:
+                if (!strcmp(arg[0], "quit")) quit = TRUE;
+                else if (!strcmp(arg[0], "exit")) quit = TRUE;
+                else if (!strcmp(arg[0], "cd")) {
+                    if(narg > 1 && strcmp(arg[1], "~")){
+                        chdir(arg[1]);
+                    }
+                    else {
+                        // to home directory
+                        chdir(getenv("HOME"));
+                    }
+                }
+                else if (!strcmp(arg[0], "type")) {
+                    if (narg > 1) {
+                        int	i, fid;
+                        int	readcount;
+                        char	buf[512];
+                        /*  학생들이 프로그램 작성할 것
+                            fid = open(arg[1], ...);
+                            if (fid >= 0) {
+                            readcount = read(fid, buf, 512);
+                            while (readcount > 0) {
+                            for (i = 0; i < readcount; i++)
+                            putchar(buf[i]);
+                            readcount = read(fid, buf, 512);
+                            }
+                            }
+                            close(fid);
+                            */
+                    }
                 }
                 else {
-                    // to home directory
-                    chdir(getenv("HOME"));
+                    how = (type == AMPERSAND) ? BACKGROUND : FOREGROUND;
+                    arg[narg] = NULL;
+                    if (narg != 0) {
+                        execute(arg, how, &comm_list);
+                    }
                 }
-			}
-			else if (!strcmp(arg[0], "type")) {
-				if (narg > 1) {
-					int	i, fid;
-					int	readcount;
-					char	buf[512];
-					/*  학생들이 프로그램 작성할 것
-					fid = open(arg[1], ...);
-					if (fid >= 0) {
-						readcount = read(fid, buf, 512);
-						while (readcount > 0) {
-							for (i = 0; i < readcount; i++)
-								putchar(buf[i]);
-							readcount = read(fid, buf, 512);
-						}
-					}
-					close(fid);
-					*/
-				}
-			}
-			else {
-				how = (type == AMPERSAND) ? BACKGROUND : FOREGROUND;
-				arg[narg] = NULL;
-				if (narg != 0) {
-                    newexecute(arg, &comm_list);
-					//execute(arg, how, &re_pi_info);
-                }
-			}
-			narg = 0;
-			if (type == EOL)
-				finished = TRUE;
-			break; 
-        case RE_IN:
-            re_pi_info.re_info.in_redi_idx = narg;
-            set_in_idx(&comm_list, narg);
-            break;
-        case RE_OUT:
-            re_pi_info.re_info.out_redi_idx = narg;
-            set_out_idx(&comm_list, narg);
+                narg = 0;
+                if (type == EOL)
+                    finished = TRUE;
+                break; 
+            case RE_IN:
+                set_in_idx(&comm_list, narg);
+                break;
+            case RE_OUT:
+                set_out_idx(&comm_list, narg);
             break;
         case PIPE:
-            add_pipe_index(&(re_pi_info.pi_info), narg);
             set_pipe(&comm_list);
             new_comm = TRUE;
             break;
@@ -307,12 +300,14 @@ int parse_and_execute(char *input)
 void signal_init() 
 {
     signal(SIGINT, sig_handler); 
-    signal(SIGCHLD, sigchild_handler);
+    //signal(SIGQUIT, sig_handler);
+    //signal(SIGCHLD, sigchild_handler);
 }
 
 main()
 {
 	int	quit;
+    int p_res;
     char cwd[1024];
 	printf("msh(%s) # ", getcwd(cwd, 1024));
  
@@ -321,8 +316,11 @@ main()
 	while (gets(input)) {
 		quit = parse_and_execute(input);
 		if (quit) break;
+
+        wait_process(&bg_proc_head, BACKGROUND);
+
         printf("msh(%s) # ", getcwd(cwd, 1024));
-	}
+    }
 }
 
 

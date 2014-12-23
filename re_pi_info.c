@@ -26,7 +26,7 @@ int append_int_node(struct int_node **head, int data)
         curr = curr->next;
     }
 
-    curr->next = create_int_node(data-curr->data);
+    curr->next = create_int_node(data);
     return 1;
 }
 
@@ -71,22 +71,6 @@ int get_int(struct int_node **head, int index)
     }
 
     return curr->data;
-}
-
-
-int add_pipe_index(struct pipe_info *p_info, int index) 
-{
-    append_int_node(&(p_info->head), index);
-    p_info->cnt++;
-}
-
-int get_pipe_index(struct pipe_info *p_info) 
-{
-    int ret;
-    ret = get_int(&(p_info->head), 0);
-    remove_int_node(&(p_info->head), 0);
-    p_info->cnt--;
-    return ret;
 }
 
 int set_comm_idx(struct comm_list *comm_list, int comm_idx)
